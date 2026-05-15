@@ -46,6 +46,32 @@ make mlx       # Layer 1: fast inference (port 8001)
 make router    # Layer 3: orchestrator (port 8000)
 ```
 
+Run each long-running command in a separate terminal tab/window.
+
+**Use from iPhone on the same Wi-Fi:**
+
+```bash
+# Terminal 1
+make mlx
+
+# Terminal 2
+make router
+
+# Terminal 3
+make webui
+
+# Get the Mac IP address
+make ip
+```
+
+Then open this from Safari on iPhone:
+
+```text
+http://<your-mac-ip>:8080
+```
+
+Open WebUI is configured to use the local router at `http://127.0.0.1:8000/v1` with API key `secret123` by default.
+
 The installer automatically chooses an MLX model for the Mac it runs on. It queries Hugging Face for current `mlx-community` text-generation chat/instruct models, filters for 4-bit local models, matches the model size to system RAM, and saves the selected model to `.env`.
 
 Override automatic selection anytime:

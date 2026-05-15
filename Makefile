@@ -13,7 +13,10 @@ router:
 	source .venv/bin/activate && bash scripts/start_router.sh
 
 webui:
-	bash scripts/start_webui.sh
+	source .venv/bin/activate && bash scripts/start_webui.sh
+
+ip:
+	@ipconfig getifaddr en0 || ipconfig getifaddr en1
 
 help:
 	@echo "Targets:"
@@ -22,3 +25,4 @@ help:
 	@echo "  make llama     — start llama.cpp server (port 8002)"
 	@echo "  make router    — start orchestrator router (port 8000)"
 	@echo "  make webui     — start Open WebUI (port 8080)"
+	@echo "  make ip        — show your Mac Wi-Fi IP address"
