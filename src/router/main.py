@@ -1,19 +1,43 @@
 from fastapi import FastAPI, HTTPException, Header
-from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 from typing import Optional
 import httpx
+import logging
 import os
 
 from .decision import RouteDecision, decide_backend
 from .router import MLX_URL, LLAMA_URL
-from .auth import verify_api_key
+from .auth import verify_api_key, API_KEY
+
+logger = logging.getLogger("llm_stack.router")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+if not API_KEY:
+    logger.warning(
+        "API_KEY is not set. The router will reject all requests until API_KEY is provided in the environment."
+    )
+
+MAX_PROMPT_CHARS = int(os.environ.get("MAX_PROMPT_CHARS", "20000"))
+MAX_TOKENS_CAP = int(os.environ.get("MAX_TOKENS_CAP", "2048"))
 
 app = FastAPI(title="LLM Stack Router")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://127.0.0.1:8080",
+        "http://localhost:8080",
+    ],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "X-Api-Key", "Content-Type"],
+    allow_credentials=False,
+)
+
 
 class ChatRequest(BaseModel):
-    prompt: str
-    max_tokens: Optional[int] = 300
+    prompt: str = Field(..., max_length=MAX_PROMPT_CHARS)
+    max_tokens: Optional[int] = Field(default=300, ge=1, le=MAX_TOKENS_CAP)
     backend: Optional[str] = None
 
 
@@ -25,7 +49,7 @@ class OpenAIMessage(BaseModel):
 class OpenAIChatRequest(BaseModel):
     model: Optional[str] = "llm-stack"
     messages: list[OpenAIMessage]
-    max_tokens: Optional[int] = 300
+    max_tokens: Optional[int] = Field(default=300, ge=1, le=MAX_TOKENS_CAP)
 
 
 @app.get("/")
@@ -57,8 +81,9 @@ async def chat(req: ChatRequest, x_api_key: str = Header(None)):
                 "text": text,
             }
         except httpx.HTTPError as exc:
+            logger.warning("llama.cpp backend error: %s", exc)
             if decision.forced:
-                raise HTTPException(status_code=503, detail=f"llama.cpp unavailable: {exc}")
+                raise HTTPException(status_code=503, detail="llama.cpp backend unavailable")
             fallback = RouteDecision(
                 backend="mlx",
                 reason=f"{decision.reason}; llama.cpp unavailable, fell back to MLX",

@@ -5,10 +5,9 @@ server:
 backends:
   mlx:
     url: "http://127.0.0.1:8001"
-    model: "mlx-community/Qwen2.5-1.5B-Instruct"
   llama:
     url: "http://127.0.0.1:8002"
     model: "models/model.gguf"
 
-auth:
-  api_key: "secret123"
+# Auth and model are configured via .env (see install.sh).
+# Do not store API keys in this file.

@@ -232,6 +232,26 @@ The router exposes:
 - `POST /v1/chat/completions`
 - `POST /chat`
 
+## Security
+
+This stack is designed for local/LAN use, not public exposure. Defaults:
+
+- The router only listens on `127.0.0.1`.
+- The MLX server only listens on `127.0.0.1` and refuses non-loopback clients.
+- Open WebUI listens on `0.0.0.0:8080` so your iPhone can reach it. Anyone on your Wi-Fi can also reach it. Set a strong password on first login.
+- `install.sh` generates a random per-install API key in `.env` (chmod 600). No more `secret123`.
+- The router uses constant-time API key comparison (`hmac.compare_digest`).
+- CORS on the router is restricted to `http://127.0.0.1:8080` and `http://localhost:8080`.
+- Requests are length-capped: `MAX_PROMPT_CHARS=20000`, `MAX_TOKENS_CAP=2048`.
+
+Things you should still do yourself:
+
+- Never commit `.env`. It's in `.gitignore`.
+- Don't port-forward 8080 or 8000 to the public internet. If you must, put TLS and a reverse proxy in front (Caddy or nginx with auth).
+- If you share the install one-liner, prefer `git clone` over `bash <(curl ...)` so users can inspect code before running.
+- Treat `logs/*.log` as containing chat history; rotate or delete as needed.
+- If you customize `config/default.yaml`, do not put secrets there. Use `.env`.
+
 ## Why Not Docker?
 
 Docker is useful for many projects, but it is not ideal for MLX on macOS.
