@@ -70,7 +70,7 @@ def is_good_chat_model(model: dict, max_params: float) -> bool:
         return False
     if not any(q in lower or q in tags for q in ["4bit", "4-bit", "q4", "mxfp4"]):
         return False
-    if not any(k in lower for k in ["instruct", "chat", "it", "gpt-oss"]):
+    if not (re.search(r"(^|[-_/])(instruct|chat|it)([-_/]|$)", lower) or "gpt-oss" in lower):
         return False
     if any(k in lower for k in ["vision", "vl", "audio", "speech", "embedding", "reranker"]):
         return False
