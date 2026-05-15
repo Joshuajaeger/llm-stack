@@ -7,31 +7,33 @@ cd "$SCRIPT_DIR"
 mkdir -p .pids logs
 
 if [ -f .env ]; then
+    # shellcheck disable=SC1091
     source .env
 fi
 
 start_service() {
     local name="$1"
-    local command="$2"
-    local pid_file=".pids/$name.pid"
+    local port="$2"
+    local command="$3"
     local log_file="logs/$name.log"
 
-    if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
-        echo "$name already running (pid $(cat "$pid_file"))"
+    if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+        local existing
+        existing=$(lsof -nP -tiTCP:"$port" -sTCP:LISTEN | head -n1)
+        echo "$name already running on port $port (pid $existing)"
         return
     fi
 
-    echo "Starting $name..."
     nohup bash -lc "$command" > "$log_file" 2>&1 &
-    echo $! > "$pid_file"
-    echo "$name started (pid $(cat "$pid_file"), log $log_file)"
+    disown
+    echo "$port" > ".pids/$name.port"
+    echo "$name starting on port $port (log $log_file)"
 }
 
-start_service "mlx" "source .venv/bin/activate && bash scripts/start_mlx.sh"
-start_service "router" "source .venv/bin/activate && bash scripts/start_router.sh"
-start_service "webui" "source .venv/bin/activate && bash scripts/start_webui.sh"
+start_service "mlx"    8001 "source .venv/bin/activate && bash scripts/start_mlx.sh"
+start_service "router" 8000 "source .venv/bin/activate && bash scripts/start_router.sh"
+start_service "webui"  8080 "source .venv/bin/activate && bash scripts/start_webui.sh"
 
 echo ""
 echo "Stack is starting. Check status with: make status"
 echo "Open WebUI from this Mac: http://127.0.0.1:8080"
-echo "Open WebUI from iPhone:   http://$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null):8080"

@@ -4,16 +4,18 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$SCRIPT_DIR"
 
-if [ ! -d .pids ]; then
-    echo "No services have been started."
-    exit 0
-fi
-
-for service in mlx router webui; do
-    pid_file=".pids/$service.pid"
-    if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
-        echo "$service: running (pid $(cat "$pid_file"))"
+check_port() {
+    local name="$1"
+    local port="$2"
+    local pid
+    pid=$(lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | head -n1 || true)
+    if [ -n "$pid" ]; then
+        echo "$name: running on port $port (pid $pid)"
     else
-        echo "$service: stopped"
+        echo "$name: stopped"
     fi
-done
+}
+
+check_port "mlx"    8001
+check_port "router" 8000
+check_port "webui"  8080

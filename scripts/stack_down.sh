@@ -4,24 +4,33 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$SCRIPT_DIR"
 
-if [ ! -d .pids ]; then
-    echo "No running stack found."
-    exit 0
-fi
-
-for pid_file in .pids/*.pid; do
-    [ -e "$pid_file" ] || continue
-    name="$(basename "$pid_file" .pid)"
-    pid="$(cat "$pid_file")"
-
-    if kill -0 "$pid" 2>/dev/null; then
-        echo "Stopping $name (pid $pid)..."
-        kill "$pid" 2>/dev/null || true
-    else
-        echo "$name is not running."
+stop_port() {
+    local name="$1"
+    local port="$2"
+    local pids
+    pids=$(lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
+    if [ -z "$pids" ]; then
+        echo "$name not running"
+        return
     fi
+    # shellcheck disable=SC2086
+    echo "Stopping $name (pids: $pids)..."
+    # shellcheck disable=SC2086
+    kill $pids 2>/dev/null || true
+    # Give them a moment, then escalate if still alive.
+    sleep 1
+    local stragglers
+    stragglers=$(lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
+    if [ -n "$stragglers" ]; then
+        # shellcheck disable=SC2086
+        kill -9 $stragglers 2>/dev/null || true
+    fi
+}
 
-    rm -f "$pid_file"
-done
+stop_port "mlx"    8001
+stop_port "router" 8000
+stop_port "webui"  8080
+
+rm -f .pids/*.pid .pids/*.port 2>/dev/null || true
 
 echo "Stack stopped."
