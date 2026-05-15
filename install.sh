@@ -37,17 +37,20 @@ _download(os.environ['MODEL'])
 print('Model downloaded.')
 "
 
-echo "5. Generating .env (API key + model)..."
-if [ -f .env ] && grep -q '^export API_KEY=' .env; then
-    echo "Existing .env detected, keeping current API key."
+echo "5. Generating .env (API key + WebUI secret + model)..."
+if [ -f .env ] && grep -q '^export API_KEY=' .env && grep -q '^export WEBUI_SECRET_KEY=' .env; then
+    echo "Existing .env detected, keeping current secrets."
 else
     API_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+    WEBUI_SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
     {
         printf 'export MODEL_ID=%q\n' "$MODEL"
         printf 'export API_KEY=%q\n' "$API_KEY"
+        printf 'export WEBUI_SECRET_KEY=%q\n' "$WEBUI_SECRET_KEY"
+        printf 'export DEPLOY_MODE=%q\n' "${DEPLOY_MODE:-local}"
     } > .env
     chmod 600 .env
-    echo "Generated new API_KEY and saved to .env (permissions 600)."
+    echo "Generated API_KEY and WEBUI_SECRET_KEY in .env (permissions 600)."
 fi
 
 echo ""

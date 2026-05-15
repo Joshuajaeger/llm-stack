@@ -2,7 +2,7 @@
 
 A local LLM stack for Apple Silicon Macs.
 
-It runs a local ChatGPT-style web app on your Mac, uses MLX for fast Apple Silicon inference, optionally uses llama.cpp for grammar-constrained structured output, and exposes the UI to other devices on your Wi-Fi such as an iPhone.
+It runs a ChatGPT-style web app on your Mac, uses MLX for fast Apple Silicon inference, optionally uses llama.cpp for grammar-constrained structured output, and can be exposed to other people through a private Tailscale network with admin-approved accounts.
 
 ## Architecture
 
@@ -31,8 +31,8 @@ It runs a local ChatGPT-style web app on your Mac, uses MLX for fast Apple Silic
 
 - Runs local LLM inference on your Mac with MLX.
 - Automatically chooses a model that should fit your Mac.
-- Provides an Open WebUI browser interface.
-- Lets you use the UI from your iPhone on the same Wi-Fi.
+- Provides an Open WebUI browser interface with accounts.
+- Supports remote access through Tailscale with admin approval per user.
 - Adds a FastAPI router so the frontend talks to one local API.
 - Includes optional llama.cpp support for structured / JSON / grammar-constrained output.
 - Avoids Docker for MLX so Apple Metal acceleration is preserved.
@@ -44,7 +44,7 @@ It runs a local ChatGPT-style web app on your Mac, uses MLX for fast Apple Silic
 | 1 | MLX Server | `8001` | Fast local inference on Apple Silicon |
 | 2 | llama.cpp Server | `8002` | Optional structured output using GGUF + GBNF grammar |
 | 3 | FastAPI Router | `8000` | Routes requests and exposes OpenAI-compatible endpoints |
-| 4 | Open WebUI | `8080` | Chat UI, users, browser access, iPhone access |
+| 4 | Open WebUI | `8080` | Chat UI, users, accounts, admin approval |
 
 ## Install
 
@@ -52,9 +52,17 @@ It runs a local ChatGPT-style web app on your Mac, uses MLX for fast Apple Silic
 bash <(curl -s https://raw.githubusercontent.com/Joshuajaeger/llm-stack/main/install.sh)
 ```
 
-The installer clones the repo, creates `.venv`, installs Python packages, picks an MLX model, downloads it, and saves the selected model to `.env`.
+The installer clones the repo, creates `.venv`, installs Python packages, picks an MLX model, downloads it, and generates per-install secrets (`API_KEY`, `WEBUI_SECRET_KEY`) into a chmod-600 `.env`.
 
-## Start The Default Stack
+Prefer to inspect before running:
+
+```bash
+git clone https://github.com/Joshuajaeger/llm-stack.git
+cd llm-stack
+make install
+```
+
+## Start The Stack
 
 ```bash
 cd ~/llm-stack
@@ -63,11 +71,7 @@ source .env
 make up
 ```
 
-This starts the native macOS stack in the background:
-
-- MLX server
-- FastAPI router
-- Open WebUI
+This starts MLX, the router, and Open WebUI in the background.
 
 Open the UI on the Mac:
 
@@ -75,23 +79,70 @@ Open the UI on the Mac:
 http://127.0.0.1:8080
 ```
 
-## Use From iPhone
+The very first account you create becomes the admin.
 
-Make sure your Mac and iPhone are on the same Wi-Fi.
+## Remote Access
 
-Get your Mac's Wi-Fi IP:
+The stack supports four deployment modes, set via `DEPLOY_MODE` in `.env`:
 
-```bash
-make ip
-```
+| Mode | Bind | Use Case |
+|---|---|---|
+| `local` (default) | `127.0.0.1` | Mac only, no remote access |
+| `tailscale` | Tailscale IP | Private mesh, recommended for remote |
+| `lan` | `0.0.0.0` | Anyone on your Wi-Fi/Ethernet |
+| `public` | `0.0.0.0` | Only behind TLS reverse proxy |
 
-Open this on your iPhone, replacing the IP with your Mac's actual IP:
+### Recommended: Tailscale
+
+[Tailscale](https://tailscale.com) gives you a private encrypted network. Only people you invite can reach the Mac, from anywhere in the world, without port forwarding.
+
+1. Install Tailscale on the Mac and run `tailscale up`.
+2. Edit `.env` and set:
+
+   ```bash
+   export DEPLOY_MODE="tailscale"
+   ```
+
+3. Restart the stack:
+
+   ```bash
+   make down
+   make up
+   ```
+
+4. Get the shareable URL:
+
+   ```bash
+   make tailscale
+   ```
+
+   This prints both the IPv4 and MagicDNS URLs.
+
+5. Invite users to your tailnet from the [Tailscale admin console](https://login.tailscale.com/admin/users). Once they accept and install Tailscale, they can reach your Open WebUI URL from any network they're on.
+
+### How New Users Get Access
+
+The stack is configured for self-service signup with admin approval:
+
+1. A new user opens your Open WebUI URL.
+2. They click "Sign up" and create an account.
+3. Their account is created in `pending` state — they cannot use the chat yet.
+4. You log in as admin, go to **Admin Panel → Users**, and switch their role from `pending` to `user`.
+5. They can now sign in and use the LLM.
+
+This is enforced by these Open WebUI environment variables, set in `scripts/start_webui.sh`:
 
 ```text
-http://192.168.1.42:8080
+WEBUI_AUTH=True
+ENABLE_SIGNUP=True
+DEFAULT_USER_ROLE=pending
 ```
 
-If macOS asks for network permission, allow it.
+To disable signups entirely (admin-creates-users-only mode):
+
+```bash
+export ENABLE_SIGNUP=False
+```
 
 ## Useful Commands
 
@@ -104,7 +155,8 @@ make mlx       # Run only the MLX server in the foreground
 make router    # Run only the router in the foreground
 make webui     # Run only Open WebUI in the foreground
 make llama     # Run llama.cpp server in the foreground
-make ip        # Show your Mac Wi-Fi IP address
+make ip        # Show your local network IP
+make tailscale # Show Tailscale URL for sharing
 make help      # Show available commands
 ```
 
@@ -214,43 +266,43 @@ MODEL_ID="mlx-community/Your-Model-Here" bash <(curl -s https://raw.githubuserco
 
 ## Open WebUI Configuration
 
-Open WebUI is configured to talk to the router using an OpenAI-compatible API:
+Open WebUI talks to the router using an OpenAI-compatible API:
 
 ```text
 http://127.0.0.1:8000/v1
 ```
 
-Default API key:
-
-```text
-secret123
-```
+The API key is generated per-install and stored in `.env` (`API_KEY`). It is never `secret123` and never committed to the repo.
 
 The router exposes:
 
 - `GET /v1/models`
 - `POST /v1/chat/completions`
 - `POST /chat`
+- `POST /route`  (debug: shows backend decision)
 
 ## Security
 
-This stack is designed for local/LAN use, not public exposure. Defaults:
+The defaults are local-only. Remote access is opt-in via `DEPLOY_MODE`.
 
-- The router only listens on `127.0.0.1`.
-- The MLX server only listens on `127.0.0.1` and refuses non-loopback clients.
-- Open WebUI listens on `0.0.0.0:8080` so your iPhone can reach it. Anyone on your Wi-Fi can also reach it. Set a strong password on first login.
-- `install.sh` generates a random per-install API key in `.env` (chmod 600). No more `secret123`.
+What the stack does for you:
+
+- The router only listens on `127.0.0.1`. It is not reachable from any other host.
+- The MLX server listens on `127.0.0.1` and refuses non-loopback clients at the middleware level (defense in depth).
+- Open WebUI binds to `127.0.0.1` by default. To expose it, you must explicitly set `DEPLOY_MODE` to `tailscale`, `lan`, or `public`.
+- `install.sh` generates two strong random secrets per install: `API_KEY` (router) and `WEBUI_SECRET_KEY` (Open WebUI JWT signing). Both go into `.env` with `chmod 600`.
+- Open WebUI is configured with `WEBUI_AUTH=True`, `ENABLE_SIGNUP=True`, `DEFAULT_USER_ROLE=pending` — new accounts cannot use the LLM until an admin promotes them.
 - The router uses constant-time API key comparison (`hmac.compare_digest`).
 - CORS on the router is restricted to `http://127.0.0.1:8080` and `http://localhost:8080`.
-- Requests are length-capped: `MAX_PROMPT_CHARS=20000`, `MAX_TOKENS_CAP=2048`.
+- Requests are length-capped: `MAX_PROMPT_CHARS=20000`, `MAX_TOKENS_CAP=2048` (configurable via env).
 
-Things you should still do yourself:
+What you should still do:
 
-- Never commit `.env`. It's in `.gitignore`.
-- Don't port-forward 8080 or 8000 to the public internet. If you must, put TLS and a reverse proxy in front (Caddy or nginx with auth).
-- If you share the install one-liner, prefer `git clone` over `bash <(curl ...)` so users can inspect code before running.
-- Treat `logs/*.log` as containing chat history; rotate or delete as needed.
-- If you customize `config/default.yaml`, do not put secrets there. Use `.env`.
+- Never commit `.env` or `logs/`. They are in `.gitignore`.
+- Prefer Tailscale over port-forwarding. A public-internet-exposed Open WebUI is a permanent target — at minimum, you must run TLS via Caddy or nginx in front of it.
+- For invited users: send them a Tailscale invite link, not your raw IP. Tailscale handles network-level auth; Open WebUI handles application-level auth.
+- Treat `logs/*.log` as containing chat history. Rotate or delete as needed.
+- Do not put secrets in `config/default.yaml`. Use `.env`.
 
 ## Why Not Docker?
 
@@ -288,13 +340,17 @@ Makefile                 User-friendly commands
 
 ## Troubleshooting
 
-If the iPhone cannot open the UI:
+If a remote user cannot open the UI:
 
-- Confirm Mac and iPhone are on the same Wi-Fi.
-- Run `make status` and make sure services are running.
-- Run `make ip` again and use that exact IP.
-- Try `http://127.0.0.1:8080` on the Mac first.
+- Confirm `DEPLOY_MODE` in `.env` is set (`tailscale`, `lan`, or `public`), not `local`.
+- Run `make status` and make sure all services are running.
+- For Tailscale: run `make tailscale` and confirm the URL. The user must be invited to your tailnet and running Tailscale on their device.
+- For LAN: run `make ip` and verify the user is on the same network.
 - Allow incoming network access if macOS asks.
+
+If a new user cannot chat after signing up:
+
+- They are in `pending` role. Open the UI as admin → Admin Panel → Users → set their role to `user`.
 
 If model download fails:
 
@@ -306,4 +362,4 @@ If llama.cpp does not start:
 
 - Confirm `llama-server` is installed with `brew install llama.cpp`.
 - Confirm your GGUF model exists at `models/model.gguf` or set `LLAMA_MODEL`.
-- Check logs with `make logs` if running as part of a custom process setup.
+- Check `logs/` for details.

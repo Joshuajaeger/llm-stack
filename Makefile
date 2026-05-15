@@ -1,4 +1,4 @@
-.PHONY: install up down status logs mlx router webui llama ip help
+.PHONY: install up down status logs mlx router webui llama ip tailscale help
 
 install:
 	bash install.sh
@@ -30,6 +30,9 @@ webui:
 ip:
 	@ipconfig getifaddr en0 || ipconfig getifaddr en1
 
+tailscale:
+	@bash scripts/tailscale_info.sh
+
 help:
 	@echo "Targets:"
 	@echo "  make install   — clone, venv, install deps, download model"
@@ -41,4 +44,5 @@ help:
 	@echo "  make llama     — start llama.cpp server (port 8002)"
 	@echo "  make router    — start orchestrator router (port 8000)"
 	@echo "  make webui     — start Open WebUI (port 8080)"
-	@echo "  make ip        — show your Mac Wi-Fi IP address"
+	@echo "  make ip        — show your local network IP"
+	@echo "  make tailscale — show Tailscale URL for sharing with invited users"
