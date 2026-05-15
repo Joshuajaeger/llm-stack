@@ -1,46 +1,60 @@
 # LLM Stack
 
-Run a local ChatGPT-style app on your Mac and use it from your iPhone on the same Wi-Fi.
+A local LLM stack for Apple Silicon Macs.
 
-This project is made for Apple Silicon Macs. It uses MLX so the model can run fast on your Mac instead of in the cloud.
+It runs a local ChatGPT-style web app on your Mac, uses MLX for fast Apple Silicon inference, optionally uses llama.cpp for grammar-constrained structured output, and exposes the UI to other devices on your Wi-Fi such as an iPhone.
 
-## Explain Like I'm 5
+## Architecture
 
-Think of this like a little local AI machine with three parts:
+```text
+            ┌────────────────────────────┐
+            │        Open WebUI          │
+            │  browser UI + user login   │
+            └────────────┬───────────────┘
+                         │ HTTP
+            ┌────────────▼───────────────┐
+            │     FastAPI Router         │
+            │  OpenAI-compatible API     │
+            │  backend routing + auth    │
+            └────────────┬───────────────┘
+                         │ HTTP
+        ┌────────────────┴────────────────┐
+        │                                 │
+┌───────▼────────┐              ┌─────────▼────────┐
+│   MLX Server   │              │   llama.cpp API  │
+│ fast chat      │              │ JSON / grammar   │
+│ Apple Metal    │              │ structured output│
+└────────────────┘              └──────────────────┘
+```
 
-- **MLX** is the engine. It does the actual AI thinking on your Mac.
-- **Router** is the traffic helper. It receives chat requests and sends them to the right place.
-- **Open WebUI** is the website. You open it in a browser and chat with the AI.
+## What This Does
 
-Your Mac runs the AI. Your iPhone is just the screen you use to talk to it.
+- Runs local LLM inference on your Mac with MLX.
+- Automatically chooses a model that should fit your Mac.
+- Provides an Open WebUI browser interface.
+- Lets you use the UI from your iPhone on the same Wi-Fi.
+- Adds a FastAPI router so the frontend talks to one local API.
+- Includes optional llama.cpp support for structured / JSON / grammar-constrained output.
+- Avoids Docker for MLX so Apple Metal acceleration is preserved.
 
-## What You Need
+## Components
 
-- An Apple Silicon Mac: M1, M2, M3, M4, or newer.
-- macOS.
-- Python 3.
-- Git.
-- Same Wi-Fi if you want to use it from your iPhone.
+| Layer | Component | Port | Purpose |
+|---|---:|---:|---|
+| 1 | MLX Server | `8001` | Fast local inference on Apple Silicon |
+| 2 | llama.cpp Server | `8002` | Optional structured output using GGUF + GBNF grammar |
+| 3 | FastAPI Router | `8000` | Routes requests and exposes OpenAI-compatible endpoints |
+| 4 | Open WebUI | `8080` | Chat UI, users, browser access, iPhone access |
 
 ## Install
-
-Run this in Terminal:
 
 ```bash
 bash <(curl -s https://raw.githubusercontent.com/Joshuajaeger/llm-stack/main/install.sh)
 ```
 
-The installer will:
+The installer clones the repo, creates `.venv`, installs Python packages, picks an MLX model, downloads it, and saves the selected model to `.env`.
 
-- Download this project.
-- Create a Python environment.
-- Install the needed packages.
-- Pick a good AI model for your Mac automatically.
-- Download that model.
-
-## Start Everything
-
-After install, run:
+## Start The Default Stack
 
 ```bash
 cd ~/llm-stack
@@ -49,9 +63,13 @@ source .env
 make up
 ```
 
-That starts everything in the background.
+This starts the native macOS stack in the background:
 
-Open the app on your Mac:
+- MLX server
+- FastAPI router
+- Open WebUI
+
+Open the UI on the Mac:
 
 ```text
 http://127.0.0.1:8080
@@ -59,97 +77,101 @@ http://127.0.0.1:8080
 
 ## Use From iPhone
 
-First get your Mac's Wi-Fi address:
+Make sure your Mac and iPhone are on the same Wi-Fi.
+
+Get your Mac's Wi-Fi IP:
 
 ```bash
 make ip
 ```
 
-It will print something like:
-
-```text
-192.168.1.42
-```
-
-On your iPhone, open Safari and go to:
+Open this on your iPhone, replacing the IP with your Mac's actual IP:
 
 ```text
 http://192.168.1.42:8080
 ```
 
-Use the number from your Mac, not the example above.
-
-Your iPhone and Mac must be on the same Wi-Fi.
-
-## Stop Everything
-
-```bash
-make down
-```
+If macOS asks for network permission, allow it.
 
 ## Useful Commands
 
 ```bash
-make up        # Start the local AI stack
-make down      # Stop everything
-make status    # Show what is running
-make logs      # Watch logs
+make up        # Start MLX, router, and Open WebUI in the background
+make down      # Stop the background stack
+make status    # Show which services are running
+make logs      # Follow all service logs
+make mlx       # Run only the MLX server in the foreground
+make router    # Run only the router in the foreground
+make webui     # Run only Open WebUI in the foreground
+make llama     # Run llama.cpp server in the foreground
 make ip        # Show your Mac Wi-Fi IP address
-make help      # Show commands
+make help      # Show available commands
 ```
+
+## Where Is llama.cpp?
+
+llama.cpp is the optional structured-output layer.
+
+This repo includes the integration pieces:
+
+- `scripts/start_llama.sh` starts a `llama-server` process.
+- `grammar/json.gbnf` provides a JSON grammar file.
+- `src/router/router.py` defines `LLAMA_URL` as `http://127.0.0.1:8002/completion`.
+- `src/router/main.py` routes structured prompts to llama.cpp when enabled.
+
+This repo does not vendor llama.cpp itself and does not include GGUF model files. llama.cpp is an external binary and GGUF models are usually large.
+
+Install llama.cpp with Homebrew:
+
+```bash
+brew install llama.cpp
+```
+
+Place a GGUF model here:
+
+```text
+~/llm-stack/models/model.gguf
+```
+
+Or point to another GGUF file:
+
+```bash
+export LLAMA_MODEL="/path/to/model.gguf"
+```
+
+Then run:
+
+```bash
+make llama
+```
+
+By default, `make up` starts MLX, router, and Open WebUI. Start llama.cpp separately when you want the structured-output backend active.
 
 ## Model Selection
 
-The project automatically chooses a model based on your Mac.
+The MLX model is selected dynamically.
 
-Rough idea:
+The selector checks Hugging Face for current `mlx-community` chat/instruct text-generation models, filters for local-friendly 4-bit models, estimates what your Mac can handle from system RAM, and picks a suitable model.
 
-- 8 GB RAM gets a smaller model.
-- 16 GB RAM gets a better small model.
-- 24 GB RAM gets a stronger model.
-- 48 GB or more can run larger models.
+Rough guide:
 
-The selector checks Hugging Face for current MLX chat models, then picks one that should fit your Mac.
+| Mac RAM | Typical Model Size |
+|---:|---:|
+| 8 GB | up to about 1.5B |
+| 16 GB | up to about 3B |
+| 24 GB | up to about 7B |
+| 48 GB | up to about 14B |
+| 64+ GB | up to about 32B |
 
-If you want to force a specific model:
+Force a specific MLX model:
 
 ```bash
 MODEL_ID="mlx-community/Your-Model-Here" bash <(curl -s https://raw.githubusercontent.com/Joshuajaeger/llm-stack/main/install.sh)
 ```
 
-## Why Not Docker?
+## Open WebUI Configuration
 
-Docker is useful for many apps, but it is not the best choice for MLX on macOS.
-
-MLX needs Apple Metal acceleration to be fast. Docker Desktop on Mac does not give Linux containers normal direct access to Apple Metal.
-
-So this project runs natively on macOS and uses `make up` like a simple Docker Compose-style command.
-
-## Troubleshooting
-
-If the website does not open on iPhone:
-
-- Make sure Mac and iPhone are on the same Wi-Fi.
-- Run `make status` to check that services are running.
-- Run `make ip` again and use that exact IP.
-- If macOS asks about network access, click Allow.
-- Try opening `http://127.0.0.1:8080` on the Mac first.
-
-If install fails while downloading the model:
-
-- Run the install command again.
-- Hugging Face may rate-limit anonymous downloads.
-- Setting a Hugging Face token can improve download reliability.
-
-## Advanced Pieces
-
-Ports used by default:
-
-- MLX server: `8001`
-- Router: `8000`
-- Open WebUI: `8080`
-
-Open WebUI talks to the router here:
+Open WebUI is configured to talk to the router using an OpenAI-compatible API:
 
 ```text
 http://127.0.0.1:8000/v1
@@ -161,15 +183,64 @@ Default API key:
 secret123
 ```
 
+The router exposes:
+
+- `GET /v1/models`
+- `POST /v1/chat/completions`
+- `POST /chat`
+
+## Why Not Docker?
+
+Docker is useful for many projects, but it is not ideal for MLX on macOS.
+
+MLX is fast because it uses Apple Metal directly. Docker Desktop on macOS does not provide normal direct Apple Metal acceleration to Linux containers, so containerizing MLX would remove the main performance advantage.
+
+This project uses a native compose-style runner instead:
+
+```bash
+make up
+make down
+make logs
+make status
+```
+
 ## Project Layout
 
 ```text
-src/mlx_server/       AI engine server
-src/router/           Router API
-src/model_selector.py Automatic model picker
-scripts/              Start and stop scripts
-grammar/              llama.cpp grammar files
-config/               Example config
-Procfile              Process list
-Makefile              Easy commands
+src/mlx_server/          MLX inference server
+src/router/              FastAPI router and OpenAI-compatible API
+src/llama_cpp_server/    llama.cpp configuration helpers
+src/model_selector.py    Dynamic Hugging Face MLX model selector
+scripts/start_mlx.sh     Start MLX server
+scripts/start_router.sh  Start router
+scripts/start_webui.sh   Start Open WebUI
+scripts/start_llama.sh   Start llama.cpp server
+scripts/stack_up.sh      Start default stack in background
+scripts/stack_down.sh    Stop background stack
+grammar/json.gbnf        Example JSON grammar for llama.cpp
+config/default.yaml      Example configuration
+Procfile                 Process list reference
+Makefile                 User-friendly commands
 ```
+
+## Troubleshooting
+
+If the iPhone cannot open the UI:
+
+- Confirm Mac and iPhone are on the same Wi-Fi.
+- Run `make status` and make sure services are running.
+- Run `make ip` again and use that exact IP.
+- Try `http://127.0.0.1:8080` on the Mac first.
+- Allow incoming network access if macOS asks.
+
+If model download fails:
+
+- Run the install command again.
+- Hugging Face may rate-limit anonymous downloads.
+- Set a Hugging Face token if you need more reliable downloads.
+
+If llama.cpp does not start:
+
+- Confirm `llama-server` is installed with `brew install llama.cpp`.
+- Confirm your GGUF model exists at `models/model.gguf` or set `LLAMA_MODEL`.
+- Check logs with `make logs` if running as part of a custom process setup.
