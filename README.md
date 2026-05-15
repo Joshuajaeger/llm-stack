@@ -27,25 +27,23 @@ A local LLM inference stack with heterogeneous backend routing.
 
 ## Quick Start
 
+**One-liner install:**
 ```bash
-# Create venv
-python3 -m venv .venv
-source .venv/bin/activate
+bash <(curl -s https://raw.githubusercontent.com/Joshuajaeger/llm-stack/main/install.sh)
+```
 
-# Install
-pip install -r requirements.txt
+Or manually:
+```bash
+git clone https://github.com/Joshuajaeger/llm-stack.git
+cd llm-stack
+make install    # venv + pip + model download
+```
 
-# 1. Start MLX server (fast inference)
-bash scripts/start_mlx.sh
-
-# 2. Start llama.cpp server (structured output)
-bash scripts/start_llama.sh
-
-# 3. Start router
-bash scripts/start_router.sh
-
-# 4. Start Open WebUI
-bash scripts/start_webui.sh
+**Start the stack:**
+```bash
+cd llm-stack && source .venv/bin/activate
+make mlx       # Layer 1: fast inference (port 8001)
+make router    # Layer 3: orchestrator (port 8000)
 ```
 
 ## Project Structure
