@@ -1,0 +1,8 @@
+# JSON array / object grammar for llama.cpp GBNF
+root ::= object | array
+object ::= "{" pair ("," pair)* "}"
+pair ::= string ":" value
+array ::= "[" value ("," value)* "]"
+value ::= string | number | object | array | "true" | "false" | "null"
+string ::= "\"" [^"]* "\""
+number ::= "-"? ("0" | [1-9] [0-9]*) ("." [0-9]+)?
