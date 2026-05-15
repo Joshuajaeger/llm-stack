@@ -229,6 +229,9 @@ Confirm `DEPLOY_MODE` is set to something other than `local` in `.env`. Run `mak
 **A new user signed up but cannot chat.**
 They are in role `pending`. Open the UI as admin → Admin Panel → Users → set role to `user`.
 
+**Install fails with "No matching distribution found for open-webui".**
+Open WebUI currently requires Python 3.11 or 3.12. The installer detects a compatible Python automatically. If none is installed, run `brew install python@3.12` and re-run the installer.
+
 **Model download fails during install.**
 Re-run install. Hugging Face may rate-limit anonymous downloads; setting a `HF_TOKEN` improves reliability.
 
