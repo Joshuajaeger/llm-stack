@@ -3,6 +3,8 @@ __pycache__/
 .venv/
 venv/
 .env
+.pids/
+logs/
 *.gguf
 *.safetensors
 .DS_Store

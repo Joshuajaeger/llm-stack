@@ -42,25 +42,25 @@ make install    # venv + pip + model download
 **Start the stack:**
 ```bash
 cd llm-stack && source .venv/bin/activate
-make mlx       # Layer 1: fast inference (port 8001)
-make router    # Layer 3: orchestrator (port 8000)
+source .env
+make up
 ```
 
-Run each long-running command in a separate terminal tab/window.
+This starts MLX, the router, and Open WebUI in the background while keeping MLX native on macOS for Metal acceleration.
+
+Useful commands:
+
+```bash
+make status    # show running services
+make logs      # follow logs
+make down      # stop everything
+make ip        # show your Mac Wi-Fi IP address
+```
 
 **Use from iPhone on the same Wi-Fi:**
 
 ```bash
-# Terminal 1
-make mlx
-
-# Terminal 2
-make router
-
-# Terminal 3
-make webui
-
-# Get the Mac IP address
+make up
 make ip
 ```
 
