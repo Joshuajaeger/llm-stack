@@ -4,7 +4,8 @@ from typing import Optional
 import httpx
 import os
 
-from .router import MLX_URL, LLAMA_URL, is_structured
+from .decision import RouteDecision, decide_backend
+from .router import MLX_URL, LLAMA_URL
 from .auth import verify_api_key
 
 app = FastAPI(title="LLM Stack Router")
@@ -13,6 +14,7 @@ app = FastAPI(title="LLM Stack Router")
 class ChatRequest(BaseModel):
     prompt: str
     max_tokens: Optional[int] = 300
+    backend: Optional[str] = None
 
 
 class OpenAIMessage(BaseModel):
@@ -36,26 +38,72 @@ async def chat(req: ChatRequest, x_api_key: str = Header(None)):
     if not verify_api_key(x_api_key):
         raise HTTPException(status_code=401, detail="unauthorized")
 
-    backend = "llama.cpp" if is_structured(req.prompt) else "MLX"
-    url = LLAMA_URL if is_structured(req.prompt) else MLX_URL
+    decision = decide_backend(req.prompt, req.backend)
 
     async with httpx.AsyncClient(timeout=60) as client:
-        if is_structured(req.prompt):
-            r = await client.post(url, json={
-                "prompt": req.prompt,
-                "n_predict": req.max_tokens,
-            })
-            body = r.json()
-            text = body.get("content", str(body))
-        else:
-            r = await client.post(url, json={
-                "prompt": req.prompt,
-                "max_tokens": req.max_tokens,
-            })
-            body = r.json()
-            text = body.get("text", str(body))
+        if decision.backend == "mlx":
+            text = await call_mlx(client, req.prompt, req.max_tokens)
+            return {
+                "backend": "MLX",
+                "decision": decision.__dict__,
+                "text": text,
+            }
 
-    return {"backend": backend, "text": text}
+        try:
+            text = await call_llama(client, req.prompt, req.max_tokens)
+            return {
+                "backend": "llama.cpp",
+                "decision": decision.__dict__,
+                "text": text,
+            }
+        except httpx.HTTPError as exc:
+            if decision.forced:
+                raise HTTPException(status_code=503, detail=f"llama.cpp unavailable: {exc}")
+            fallback = RouteDecision(
+                backend="mlx",
+                reason=f"{decision.reason}; llama.cpp unavailable, fell back to MLX",
+                structured_score=decision.structured_score,
+                fast_score=decision.fast_score,
+            )
+            text = await call_mlx(client, req.prompt, req.max_tokens)
+            return {
+                "backend": "MLX",
+                "decision": fallback.__dict__,
+                "text": text,
+            }
+
+
+async def call_mlx(client: httpx.AsyncClient, prompt: str, max_tokens: int | None) -> str:
+    r = await client.post(
+        MLX_URL,
+        json={
+            "prompt": prompt,
+            "max_tokens": max_tokens,
+        },
+    )
+    r.raise_for_status()
+    body = r.json()
+    return body.get("text", str(body))
+
+
+async def call_llama(client: httpx.AsyncClient, prompt: str, max_tokens: int | None) -> str:
+    r = await client.post(
+        LLAMA_URL,
+        json={
+            "prompt": prompt,
+            "n_predict": max_tokens,
+        },
+    )
+    r.raise_for_status()
+    body = r.json()
+    return body.get("content", str(body))
+
+
+@app.post("/route")
+def route(req: ChatRequest, x_api_key: str = Header(None)):
+    if not verify_api_key(x_api_key):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    return decide_backend(req.prompt, req.backend).__dict__
 
 
 def auth_or_401(x_api_key: str | None, authorization: str | None) -> str:
@@ -83,7 +131,7 @@ async def openai_chat_completions(
 ):
     api_key = auth_or_401(x_api_key, authorization)
     prompt = "\n".join(f"{m.role}: {m.content}" for m in req.messages)
-    result = await chat(ChatRequest(prompt=prompt, max_tokens=req.max_tokens), x_api_key=api_key)
+    result = await chat(ChatRequest(prompt=prompt, max_tokens=req.max_tokens, backend=req.model), x_api_key=api_key)
     return {
         "id": "chatcmpl-local",
         "object": "chat.completion",

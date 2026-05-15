@@ -147,6 +147,49 @@ make llama
 
 By default, `make up` starts MLX, router, and Open WebUI. Start llama.cpp separately when you want the structured-output backend active.
 
+## Routing Decision Tree
+
+The user does not need to choose MLX or llama.cpp manually. Open WebUI talks to one API, and the router decides internally.
+
+```text
+Incoming prompt
+      │
+      ▼
+Did caller force a backend?
+      │
+      ├── yes: use requested backend
+      │
+      ▼
+Does the prompt strongly request JSON, schema, grammar, or strict machine-readable output?
+      │
+      ├── yes: try llama.cpp
+      │
+      └── no: use MLX
+              
+If llama.cpp was selected but is not running:
+      │
+      ├── forced llama.cpp: return an error
+      └── automatic choice: fall back to MLX
+```
+
+Default behavior:
+
+- Normal chat, writing, summarizing, brainstorming, and explanation prompts go to MLX.
+- JSON, schema, grammar, extraction, parsing, and strict-format prompts go to llama.cpp when available.
+- If llama.cpp is unavailable and the request was not explicitly forced, the router falls back to MLX.
+
+The decision logic lives in:
+
+```text
+src/router/decision.py
+```
+
+There is also a debug endpoint for checking routing decisions:
+
+```text
+POST /route
+```
+
 ## Model Selection
 
 The MLX model is selected dynamically.
