@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$SCRIPT_DIR"
 
-MODEL_ID="${MODEL_ID:-mlx-community/Qwen2.5-1.5B-Instruct}"
+export MODEL_ID="${MODEL_ID:-$(bash scripts/select_model.sh)}"
 
 echo "Starting MLX server (model: $MODEL_ID)..."
-python src/mlx_server/server.py
+python -m src.mlx_server.server

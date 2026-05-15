@@ -46,6 +46,14 @@ make mlx       # Layer 1: fast inference (port 8001)
 make router    # Layer 3: orchestrator (port 8000)
 ```
 
+The installer automatically chooses an MLX model for the Mac it runs on. It queries Hugging Face for current `mlx-community` text-generation chat/instruct models, filters for 4-bit local models, matches the model size to system RAM, and saves the selected model to `.env`.
+
+Override automatic selection anytime:
+
+```bash
+MODEL_ID="mlx-community/Your-Model-Here" bash <(curl -s https://raw.githubusercontent.com/Joshuajaeger/llm-stack/main/install.sh)
+```
+
 ## Project Structure
 
 ```
@@ -53,6 +61,7 @@ make router    # Layer 3: orchestrator (port 8000)
 │   ├── mlx_server/         # MLX inference server
 │   │   ├── __init__.py
 │   │   └── server.py
+│   ├── model_selector.py   # Dynamic Hugging Face model selector
 │   ├── llama_cpp_server/   # llama.cpp config
 │   │   ├── __init__.py
 │   │   └── config.py
@@ -86,6 +95,12 @@ make router    # Layer 3: orchestrator (port 8000)
 
 ## Models
 
-Default models (override with env vars):
+Model selection is dynamic by default:
 
-- `MODEL_ID` — MLX model (`mlx-community/Qwen2.5-1.5B-Instruct`)
+- 8 GB RAM: up to about 1.5B parameters
+- 16 GB RAM: up to about 3B parameters
+- 24 GB RAM: up to about 7B parameters
+- 48 GB RAM: up to about 14B parameters
+- 64+ GB RAM: up to about 32B parameters
+
+Override with `MODEL_ID` if you want a specific MLX model.

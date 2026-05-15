@@ -1,13 +1,16 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 import mlx_lm
 import os
 
+from src.model_selector import select_model
+
+
 app = FastAPI(title="MLX Inference Server")
 
-MODEL_ID = os.environ.get("MODEL_ID", "mlx-community/Qwen2.5-1.5B-Instruct")
+MODEL_ID = os.environ.get("MODEL_ID") or select_model()
 
 print(f"Loading model: {MODEL_ID}...")
 model, tokenizer = mlx_lm.load(MODEL_ID)
