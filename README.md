@@ -208,14 +208,39 @@ What you should do:
 - Treat `logs/*.log` as chat history. Rotate or delete as needed.
 - Don't put secrets in `config/default.yaml`.
 
+## File Organization
+
+The stack ships with `fileorg`, a toolkit that consolidates scattered data —
+across two Macs, iCloud Drive, Desktop, Documents and Downloads — into one
+searchable library, and proves nothing was lost before you erase a machine.
+
+Documents whose category depends on their contents are classified by the local
+model through the router, so file contents never leave the Mac.
+
+```bash
+make org-check      # what's still stranded in iCloud?
+make org-scan       # catalog this Mac (read-only)
+make org-dedupe     # duplicate content, across both Macs
+make org-classify   # rules + the local LLM
+make org-plan       # write the move plan — read it before applying
+make org-apply      # dry run; add --execute via scripts/fileorg.sh to commit
+make org-verify OLD_MAC=old-mbp   # exit 0 means safe to erase
+```
+
+Nothing is deleted, every move is copy-verify-remove, and every step is
+journaled and undoable. See **[docs/file-organization.md](docs/file-organization.md)**
+for the full walkthrough, the folder taxonomy, and tool recommendations.
+
 ## Project Layout
 
 ```text
 src/mlx_server/         MLX inference server
 src/router/             FastAPI router + OpenAI-compatible API
 src/model_selector.py   Dynamic Hugging Face MLX model picker
-scripts/                Start/stop/status/logs/tailscale helpers
+src/fileorg/            File consolidation toolkit (see docs/)
+scripts/                Start/stop/status/logs/tailscale/fileorg helpers
 config/default.yaml     Example configuration (no secrets)
+config/fileorg.yaml     File taxonomy and sorting rules
 .env.example            Template for .env
 Makefile                User-friendly commands
 Procfile                Process list reference

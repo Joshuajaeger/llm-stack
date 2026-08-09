@@ -1,0 +1,189 @@
+# fileorg — macOS data consolidation.
+#
+# Edit this file, not the code. Everything below is safe to change: the
+# taxonomy, what lands where, what never gets touched.
+# No secrets here (the router API key comes from .env).
+
+# Where the consolidated library lives. Default is a folder inside iCloud Drive
+# so both Macs — and your phone — see the same tree.
+library_root: "~/Library/Mobile Documents/com~apple~CloudDocs/Library"
+
+# Cold storage. Point this at an external drive if you'd rather not pay for an
+# iCloud tier big enough to hold years of archives:
+#   archive_root: "/Volumes/Archive"
+archive_root: "~/Library/Mobile Documents/com~apple~CloudDocs/Library"
+
+# Catalogs, plans and journals. Defaults to .fileorg/ in the repo.
+# workdir: "~/.fileorg"
+
+taxonomy:
+  # The complete set of valid destinations. The LLM classifier is only ever
+  # allowed to answer with a label from this list.
+  categories:
+    - "00-Inbox/_needs-review"
+    - "10-Documents/finance"
+    - "10-Documents/legal"
+    - "10-Documents/health"
+    - "10-Documents/education"
+    - "10-Documents/work"
+    - "10-Documents/personal"
+    - "20-Media/photos"
+    - "20-Media/video"
+    - "20-Media/audio"
+    - "20-Media/design"
+    - "30-Projects"
+    - "40-Code"
+    - "50-Reference/books"
+    - "50-Reference/papers"
+    - "50-Reference/manuals"
+    - "50-Reference/datasets"
+    - "60-Archive"
+    - "90-Duplicates"
+
+  review_category: "00-Inbox/_needs-review"
+  duplicates_category: "90-Duplicates"
+
+  # Categories that get a YYYY/ level inserted. Media benefits; documents
+  # mostly don't, because you search those by name and content.
+  # (60-Archive is always year-partitioned — see rules.archive_after_years.)
+  date_partitioned:
+    - "20-Media/photos"
+    - "20-Media/video"
+    - "20-Media/audio"
+
+  # Categories where the folder structure IS the content. These keep their
+  # original directory layout instead of being flattened — a source tree
+  # tipped into one flat folder is a destroyed source tree.
+  preserve_structure:
+    - "30-Projects"
+    - "40-Code"
+
+rules:
+  # Checked first, in order — first match wins. Use these for the things you
+  # know about your own machine that no generic rule could guess.
+  path_rules:
+    # Keyword rules go first: a filename that says "Rechnung" tells you more
+    # than the folder it happens to be sitting in.
+    - match: "*/Library/CloudStorage/*"
+      category: "00-Inbox/_needs-review"
+      note: "third-party cloud mounts — review before moving"
+    - match: "*/Screenshots/*"
+      category: "20-Media/design"
+    - match: "*Screenshot*.png"
+      category: "20-Media/design"
+    - match: "*invoice*"
+      category: "10-Documents/finance"
+    - match: "*rechnung*"
+      category: "10-Documents/finance"
+    - match: "*steuer*"
+      category: "10-Documents/finance"
+    - match: "*tax*"
+      category: "10-Documents/finance"
+    - match: "*vertrag*"
+      category: "10-Documents/legal"
+    - match: "*contract*"
+      category: "10-Documents/legal"
+    - match: "*versicherung*"
+      category: "10-Documents/legal"
+    - match: "*lebenslauf*"
+      category: "10-Documents/personal"
+    # Location rules, checked only after the keyword rules have had a go.
+    - match: "*/node_modules/*"
+      category: "40-Code"
+    - match: "*/Desktop/*.pdf"
+      category: "00-Inbox/_needs-review"
+      note: "leftover desktop PDFs are usually mid-task; look before filing"
+    - match: "*/Movies/*"
+      category: "20-Media/video"
+    - match: "*/Music/*"
+      category: "20-Media/audio"
+    - match: "*/Pictures/*"
+      category: "20-Media/photos"
+
+  # Unambiguous by file type alone. No model needed.
+  extensions:
+    "20-Media/photos": [jpg, jpeg, heic, png, gif, tiff, tif, bmp, webp, raw, cr2, nef, arw, dng]
+    "20-Media/video": [mov, mp4, m4v, avi, mkv, webm, mpg, mpeg, prproj, fcpbundle]
+    "20-Media/audio": [mp3, m4a, wav, aiff, flac, aac, ogg, logicx, band]
+    "20-Media/design": [psd, ai, sketch, fig, xd, indd, afdesign, afphoto, svg]
+    "40-Code": [py, js, ts, tsx, jsx, go, rs, rb, java, kt, swift, c, h, cpp, hpp, cs,
+                sh, bash, zsh, sql, ipynb, toml, lock, gradle, cmake]
+    "50-Reference/books": [epub, mobi, azw3, djvu]
+    "50-Reference/datasets": [csv, tsv, parquet, jsonl, db, sqlite, sav, dta]
+
+  # File types whose category depends on what's *inside* them. These are the
+  # ones handed to the local LLM (or to the review queue when it's offline).
+  ambiguous_extensions:
+    [pdf, doc, docx, rtf, txt, md, pages, key, numbers, ppt, pptx, xls, xlsx, odt, ods, odp]
+
+  # Reported by `fileorg junk`, never moved or deleted automatically.
+  junk:
+    - match: "*.dmg"
+      label: "disk image / installer"
+    - match: "*.pkg"
+      label: "installer package"
+    - match: "*/Downloads/*.zip"
+      label: "downloaded archive"
+    - match: "*.crdownload"
+      label: "incomplete download"
+    - match: "*.part"
+      label: "incomplete download"
+    - match: "*/DerivedData/*"
+      label: "Xcode build cache"
+    - match: "*.vmdk"
+      label: "virtual machine disk"
+    - match: "*.vdi"
+      label: "virtual machine disk"
+
+  # Files untouched for this many years are filed under 60-Archive/<year>/
+  # instead of their live category. Set to 0 to disable.
+  archive_after_years: 5
+
+scanning:
+  # Treated as single opaque items. Splitting these apart corrupts them.
+  bundle_extensions:
+    [app, photoslibrary, tvlibrary, imovielibrary, fcpbundle, logicx, band,
+     aplibrary, rtfd, pages, key, numbers, sparsebundle, framework, bundle,
+     xcodeproj, xcworkspace, download, scptd, workflow]
+
+  # Never scanned. System state, caches, and things that regenerate.
+  exclude_names:
+    - ".Trash"
+    - ".git"
+    - "node_modules"
+    - "__pycache__"
+    - ".venv"
+    - "venv"
+    - "DerivedData"
+    - "Caches"
+    - ".Spotlight-V100"
+    - ".fseventsd"
+    - ".DocumentRevisions-V100"
+    - ".TemporaryItems"
+
+  exclude:
+    - "*/Library/Caches/*"
+    - "*/Library/Containers/*"
+    - "*/Library/Application Support/MobileSync/*"
+    - "*/.Trash/*"
+    - "*/.git/*"
+    - "*/Backups.backupdb/*"
+    - "*.DS_Store"
+    - "*.localized"
+    - "*.pyc"
+
+  # Skip empty files; they carry no information and clutter every report.
+  min_size_bytes: 1
+
+llm:
+  # Classification runs against the router in this repo — your own model, on
+  # your own Mac. File contents never leave the machine.
+  enabled: true
+  url: "http://127.0.0.1:8000/chat"
+  health_url: "http://127.0.0.1:8000/"
+  batch_size: 8
+  snippet_chars: 900
+  max_tokens: 512
+  timeout: 120.0
+  # Anything the model is less sure about than this goes to the review queue.
+  confidence_threshold: 0.55
