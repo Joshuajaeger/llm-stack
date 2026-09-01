@@ -11,3 +11,7 @@ logs/
 *.egg-info/
 dist/
 build/
+
+# fileorg working data — catalogs and plans list personal filenames.
+.fileorg/
+*.savedSearch
